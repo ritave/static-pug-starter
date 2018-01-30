@@ -4,22 +4,22 @@ const del = require('del');
 
 const gulp = require('gulp');  
 const sass = require('gulp-sass');  
-const autoprefixer = require('gulp-autoprefixer');  
-const refresh = require('gulp-refresh');  
+const autoprefixer = require('gulp-autoprefixer');
 const sourcemaps = require('gulp-sourcemaps');
-const typescript = require('gulp-typescript');
-const server = require('gulp-develop-server');
 const changed = require('gulp-changed');
+const pug = require('gulp-pug');
+const connect = require('gulp-connect');
+const tsPipeline = require('gulp-webpack-typescript-pipeline');
 
 const config = {
-    buildDir: './build/',
-    srcDir: './src/',
+    buildDir: 'build/',
+    srcDir: 'src/',
     templatesDir: 'views/',
     sassDir: 'sass/',
-    assetsDir: 'static/'
-};
+    assetsDir: 'assets/',
 
-var typescriptProject = typescript.createProject('tsconfig.json')
+    development: process.env.NODE_ENV !== 'production'
+};
 
 gulp.task('sass', () => {
     const DEST = config.buildDir + config.assetsDir + 'css/';
@@ -31,35 +31,38 @@ gulp.task('sass', () => {
         .pipe(sourcemaps.write())
         .pipe(autoprefixer('last 2 version'))
         .pipe(gulp.dest(DEST))
-        .pipe(refresh());
+        .pipe(connect.reload());
 });
 gulp.task('sass:watch', () => {
     return gulp.watch(config.srcDir + config.sassDir + '**/*.sass', ['sass']);
 });
 
 gulp.task('pug', () => {
-    const DEST = config.buildDir + config.templatesDir;
+    const DEST = config.buildDir;
     return gulp
-        .src(config.srcDir + config.templatesDir + '**/*.pug')
-        .pipe(changed(DEST))
+        .src([config.srcDir + config.templatesDir + '**/*.pug', '!**/_*/**'])
+        .pipe(pug({
+            locals: {
+                development: config.development,
+            },
+        }))
         .pipe(gulp.dest(DEST))
-        .pipe(refresh());
+        .pipe(connect.reload());
 });
 gulp.task('pug:watch', () => {
+    // We watch ALL pug files, while we ignore "_" folders
     return gulp.watch(config.srcDir + config.templatesDir + '**/*.pug', ['pug'])
 });
 
-gulp.task('typescript', () => {
-    return gulp
-        .src(config.srcDir + '**/*.ts')
-        .pipe(sourcemaps.init())
-            .pipe(typescriptProject())
-        .pipe(sourcemaps.write())
-        .pipe(gulp.dest(config.buildDir));
-});
-gulp.task('typescript:watch', () => {
-    return gulp.watch(config.srcDir + '**/*.ts', ['typescript'])
-})
+tsPipeline.registerBuildGulpTasks(
+    gulp,
+    {
+        entryPoints: {
+            bundle: __dirname + '/' + config.srcDir + 'code/entry.ts',
+        },
+        outputDir: __dirname + '/' + config.buildDir + config.assetsDir + 'js/'
+    }
+);
 
 gulp.task('assets', () => {
     const DEST = config.buildDir + config.assetsDir;
@@ -67,44 +70,31 @@ gulp.task('assets', () => {
         .src(config.srcDir + config.assetsDir + '**/*')
         .pipe(changed(DEST))
         .pipe(gulp.dest(DEST))
-        .pipe(refresh())
+        .pipe(connect.reload());
 })
 gulp.task('assets:watch', () => {
     return gulp.watch(config.srcDir + config.assetsDir + '**/*', ['assets'])
 })
 
-gulp.task('refresh:watch', () => {
-    refresh.listen();
-});
 gulp.task('watch', [
-    'refresh:watch',
     'sass:watch',
     'pug:watch',
-    'typescript:watch', 
+    'tsPipeline:watch', 
     'assets:watch'
 ]);
 
 gulp.task('build', [
     'sass',
     'pug',
-    'typescript',
+    'tsPipeline:build:dev',
     'assets'
 ])
 
-gulp.task('server:start', ['build'], () => {
-    return server.listen({
-        path: 'server.js',
-        cwd: config.buildDir,
-        successMessage: /^Server is listening/,
-        env: {
-            NODE_ENV: 'development',
-            DEBUG: 'express:application,express:router',
-            DEBUG_COLORS: true
-        }
-    })
-})
-gulp.task('server', ['server:start'], () => {
-    return gulp.watch(config.buildDir + '**/*.js', server.restart)
+gulp.task('server', ['build'], () => {
+    return connect.server({
+        root: config.buildDir,
+        livereload: true
+    });
 })
 
 gulp.task('serve', ['watch', 'server'])
