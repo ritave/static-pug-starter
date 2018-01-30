@@ -1,0 +1,12 @@
+doctype html
+html(lang="en")
+  head
+    title Express Starter
+    link(rel="stylesheet" type="text/css" href="static/css/main.css")
+    if development
+      include _includes/debug.pug
+  body
+    div
+      h1 This is a starter project by #{creator} for Expressjs server
+      h2 As well as Typescript, Pug and Sass
+      img(src="/static/img/olaf_square.png")
